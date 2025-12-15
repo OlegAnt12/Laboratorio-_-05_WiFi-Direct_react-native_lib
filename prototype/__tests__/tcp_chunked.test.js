@@ -1,9 +1,9 @@
 jest.mock('react-native-tcp-socket', () => ({
-  createConnection: jest.fn(() => ({
-    write: jest.fn(),
-    on: jest.fn(),
-    destroy: jest.fn(),
-  })),
+  createConnection: jest.fn((opts, cb) => {
+    const conn = { write: jest.fn(), on: jest.fn((ev, h) => {}), destroy: jest.fn() };
+    if (typeof cb === 'function') setImmediate(cb);
+    return conn;
+  }),
   createServer: jest.fn(cb => {
     // return a fake server object
     const server = { listen: jest.fn(), on: jest.fn(), _cb: cb };

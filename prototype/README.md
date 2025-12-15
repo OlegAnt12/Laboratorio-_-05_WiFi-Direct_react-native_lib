@@ -77,3 +77,11 @@ adb shell "cat /data/data/<your.package.name>/files/discovery_metrics.csv" > dis
 ```
 
 Or use the helper script to collect logs while you run the test and then parse metrics.
+
+Chunked TCP fallback
+
+- The app includes a TCP chunked transfer fallback (port 8080) when `sendFileTo` is not available on the native Wi‑Fi P2P bridge. The implementation is in `src/tcp_chunked.js` and has unit tests in `__tests__/tcp_chunked.test.js`.
+
+Integration testing
+
+- See `INTEGRATION_RUNBOOK.md` and `scripts/run_integration_test.sh` for device-based test steps and log collection commands.

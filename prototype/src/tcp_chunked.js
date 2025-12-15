@@ -1,5 +1,5 @@
-import TcpSocket from 'react-native-tcp-socket';
-import RNFS from 'react-native-fs';
+const TcpSocket = require('react-native-tcp-socket');
+const RNFS = require('react-native-fs');
 
 const CHUNK_SIZE = 64 * 1024; // 64KB
 
@@ -8,7 +8,7 @@ function _makeHeader(obj) {
 }
 
 // Simple newline-terminated message protocol: headerJSON\nbase64chunk\n.\n
-export async function sendFileChunked(path, host, port = 8080, onProgress = () => {}) {
+async function sendFileChunked(path, host, port = 8080, onProgress = () => {}) {
   const stat = await RNFS.stat(path);
   const total = Number(stat.size);
   let offset = 0;
@@ -47,15 +47,11 @@ export async function sendFileChunked(path, host, port = 8080, onProgress = () =
 }
 
 // Start a server that accepts chunked uploads and writes to DocumentDirectoryPath
-export function startChunkedServer(onFileReceived = () => {}, port = 8080) {
+function startChunkedServer(onFileReceived = () => {}, port = 8080) {
   const RNDocument = RNFS.DocumentDirectoryPath;
   const server = TcpSocket.createServer(socket => {
     let buf = '';
     let current = null; // {name, size, chunksReceived, path}
-
-    function flushMessage(msg) {
-      // msg contains header line then payload separator handled outside
-    }
 
     socket.on('data', data => {
       buf += data.toString();
@@ -100,4 +96,4 @@ export function startChunkedServer(onFileReceived = () => {}, port = 8080) {
   return server;
 }
 
-export default {sendFileChunked, startChunkedServer};
+module.exports = { sendFileChunked, startChunkedServer };

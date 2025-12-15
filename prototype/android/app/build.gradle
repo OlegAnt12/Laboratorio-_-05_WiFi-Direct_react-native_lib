@@ -1,7 +1,9 @@
 apply plugin: "com.android.application"
 apply plugin: "com.facebook.react"
 
-import com.android.build.OutputFile
+// Note: `com.android.build.OutputFile` is not available in newer AGP versions.
+// We avoid importing it and instead infer ABI from output properties so the
+// script works across AGP versions used by local and EAS builds.
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def expoDebuggableVariants = ['debug']
@@ -179,10 +181,39 @@ android {
             // https://developer.android.com/studio/build/configure-apk-splits.html
             // Example: versionCode 1 will generate 1001 for armeabi-v7a, 1002 for x86, etc.
             def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
-            def abi = output.getFilter(OutputFile.ABI)
+
+            // Try to determine the ABI in a way that works across AGP versions.
+            def abi = null
+            try {
+                // Some AGP versions expose a string-based filter accessor
+                if (output.respondsTo('getFilter')) {
+                    try {
+                        abi = output.getFilter('ABI')
+                    } catch (ignored) {
+                        // getFilter may throw or expect different types on some AGP versions
+                        abi = null
+                    }
+                }
+            } catch (ignored) {}
+
+            if (abi == null) {
+                // Fallback: try to infer from the output file name
+                def fileName = null
+                try { fileName = output.outputFileName } catch (ignored) {}
+                try { if (fileName == null) fileName = output.getName() } catch (ignored) {}
+                if (fileName != null) {
+                    if (fileName.contains('armeabi-v7a')) abi = 'armeabi-v7a'
+                    else if (fileName.contains('arm64-v8a')) abi = 'arm64-v8a'
+                    else if (fileName.contains('x86_64')) abi = 'x86_64'
+                    else if (fileName.contains('x86')) abi = 'x86'
+                }
+            }
+
             if (abi != null) {  // null for the universal-debug, universal-release variants
-                output.versionCodeOverride =
-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
+                def code = versionCodes.get(abi)
+                if (code != null) {
+                    output.versionCodeOverride = defaultConfig.versionCode * 1000 + code
+                }
             }
 
         }

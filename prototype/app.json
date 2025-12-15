@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "rn-wifi-p2p-prototype",
+    "slug": "rn-wifi-p2p-prototype",
+    "version": "0.1.0",
+    "sdkVersion": "48.0.0",
+    "platforms": ["android", "ios", "web"],
+    "android": {
+      "package": "com.example.rnwifip2pprototype",
+      "minSdkVersion": 4,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "NEARBY_WIFI_DEVICES",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Needed to pick and send files",
+        "NSCameraUsageDescription": "Needed to capture photos/videos to send",
+        "NSMicrophoneUsageDescription": "Needed for audio recording features",
+        "NSLocalNetworkUsageDescription": "Allows discovery and communication with nearby devices",
+        "NSBonjourServices": ["_http._tcp", "_workstation._tcp", "_ipp._tcp"]
+      }
+    },
+    "plugins": [
+      "expo-build-properties"
+    ]
+  }
+}

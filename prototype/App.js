@@ -4,6 +4,7 @@ import * as RNWifiP2p from 'react-native-wifi-p2p';
 import TcpSocket from 'react-native-tcp-socket';
 import RNFS from 'react-native-fs';
 import * as Queue from './src/queue';
+import {sendFileChunked, startChunkedServer} from './src/tcp_chunked';
 import DocumentPicker from 'react-native-document-picker';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
   const logsJsonRef = useRef([]);
   const [lastDevice, setLastDevice] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [transfers, setTransfers] = useState([]);
   const [discoverTrials, setDiscoverTrials] = useState('5');
   const discoveryMetricsRef = useRef([]);
 
@@ -56,7 +58,13 @@ export default function App() {
             if (RNWifiP2p.sendFileTo) {
               await RNWifiP2p.sendFileTo(itm.path, itm.to);
             } else {
-              throw new Error('File send fallback not implemented');
+              // TCP chunked fallback with progress reporting
+              const id = Date.now().toString() + Math.random().toString(16).slice(2);
+              setTransfers(t => [...t, {id, name: itm.path.split('/').pop(), bytes:0, total:0, status:'sending'}]);
+              await sendFileChunked(itm.path, itm.to || '127.0.0.1', itm.port || 8080, ({bytesSent, total}) => {
+                setTransfers(t => t.map(x => x.id === id ? {...x, bytes: bytesSent, total} : x));
+              });
+              setTransfers(t => t.map(x => x.id === id ? {...x, status:'done'} : x));
             }
           }
         }).then(res => appendLog('Queue processed: ' + JSON.stringify(res), 'INFO')).catch(e => appendLog('Queue process err: ' + e, 'ERROR'));
@@ -123,14 +131,18 @@ export default function App() {
 
   // Start a simple TCP server (run on group owner device)
   function startTcpServer(port = 8080) {
-    const server = TcpSocket.createServer(socket => {
-      appendLog('Client connected');
-      socket.on('data', (data) => appendLog('Received: ' + data.toString()));
-      socket.on('error', (err) => appendLog('Socket err: ' + err));
-      socket.on('close', () => appendLog('Socket closed'));
-      socket.write('Hello from server');
-    }).listen({port: port, host: '0.0.0.0'}, () => appendLog('Server listening on ' + port));
-    server.on('error', err => appendLog('Server err: ' + err));
+    // Start chunked server for incoming file uploads
+    const server = startChunkedServer(({name, bytesReceived, total, complete, path}) => {
+      appendLog(`Incoming file ${name} progress ${bytesReceived}/${total}`);
+      if (complete) appendLog(`Incoming file ${name} complete saved to ${path}`);
+      // update incoming transfer UI
+      setTransfers(t => {
+        const exists = t.find(x => x.name === name && x.status === 'receiving');
+        if (!exists) return [...t, {id: 'in-' + Date.now(), name, bytes: bytesReceived, total, status: complete ? 'done' : 'receiving', path}];
+        return t.map(x => x.name === name ? {...x, bytes: bytesReceived, total, status: complete ? 'done' : 'receiving', path} : x);
+      });
+    }, port);
+    appendLog('Server listening on ' + port);
     return server;
   }
 
@@ -229,8 +241,11 @@ export default function App() {
         await RNWifiP2p.sendFileTo(path, to);
         appendLog('File send initiated to ' + to, 'INFO');
       } else {
-        await Queue.enqueue({type:'file', path, to});
-        appendLog('Queued file for later send', 'INFO');
+          // Queue and show pending transfer entry
+          await Queue.enqueue({type:'file', path, to, port:8080});
+          const id = Date.now().toString() + Math.random().toString(16).slice(2);
+          setTransfers(t => [...t, {id, name: path.split('/').pop(), bytes:0, total:0, status:'queued'}]);
+          appendLog('Queued file for later send', 'INFO');
       }
     } catch (e) {
       if (DocumentPicker.isCancel && DocumentPicker.isCancel(e)) appendLog('File pick cancelled', 'INFO'); else appendLog('File pick/send err: ' + e, 'ERROR');
@@ -308,6 +323,14 @@ export default function App() {
       </View>
 
       <Text style={{marginTop:12, fontWeight:'bold'}}>Logs</Text>
+      <Text style={{marginTop:12, fontWeight:'bold'}}>Transfers</Text>
+      <FlatList data={transfers} keyExtractor={i => i.id} renderItem={({item}) => (
+        <View style={{padding:6}}>
+          <Text>{item.name} — {item.status} {item.total ? `(${Math.round((item.bytes||0)/item.total*100)}%)` : ''}</Text>
+          <Text style={{fontSize:11, color:'#666'}}>{(item.bytes||0)} / {(item.total||0)}</Text>
+        </View>
+      )} />
+
       <ScrollView style={{flex:1, backgroundColor:'#f7f7f7', padding:8}}>
         <Text>{log}</Text>
       </ScrollView>

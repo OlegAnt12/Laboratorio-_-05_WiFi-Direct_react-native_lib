@@ -3,11 +3,14 @@ import {SafeAreaView, View, Text, Button, FlatList, TouchableOpacity, TextInput,
 import * as RNWifiP2p from 'react-native-wifi-p2p';
 import TcpSocket from 'react-native-tcp-socket';
 import RNFS from 'react-native-fs';
+import * as Queue from './src/queue';
+import DocumentPicker from 'react-native-document-picker';
 
 export default function App() {
   const [peers, setPeers] = useState([]);
   const [connectionInfo, setConnectionInfo] = useState(null);
   const [log, setLog] = useState('');
+  const logsJsonRef = useRef([]);
   const [lastDevice, setLastDevice] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [discoverTrials, setDiscoverTrials] = useState('5');
@@ -31,6 +34,33 @@ export default function App() {
       appendLog('connection info: ' + JSON.stringify(info), 'INFO');
       // Reset reconnect attempts on successful connection
       if (info && info.groupFormed) setReconnectAttempts(0);
+      // Try to process pending queue when we form a group
+      if (info && info.groupFormed) {
+        appendLog('Processing outgoing queue on connection', 'INFO');
+        Queue.processQueue(async (itm) => {
+          if (itm.type === 'message') {
+            // try RNWifiP2p sendMessageTo if available
+            if (RNWifiP2p.sendMessageTo) {
+              await RNWifiP2p.sendMessageTo(itm.message, itm.to);
+            } else {
+              // fallback: TCP client
+              await new Promise((res, rej) => {
+                const client = TcpSocket.createConnection({port: itm.port || 8080, host: itm.to}, () => {
+                  client.write(itm.message);
+                });
+                client.on('data', () => { client.destroy(); res(); });
+                client.on('error', e => { rej(e); });
+              });
+            }
+          } else if (itm.type === 'file') {
+            if (RNWifiP2p.sendFileTo) {
+              await RNWifiP2p.sendFileTo(itm.path, itm.to);
+            } else {
+              throw new Error('File send fallback not implemented');
+            }
+          }
+        }).then(res => appendLog('Queue processed: ' + JSON.stringify(res), 'INFO')).catch(e => appendLog('Queue process err: ' + e, 'ERROR'));
+      }
     });
 
     return () => {
@@ -43,6 +73,7 @@ export default function App() {
     const ts = new Date().toISOString();
     const line = `[RN_WIFI_P2P] ${ts} ${s}`;
     setLog(prev => prev + '\n' + line);
+    logsJsonRef.current.push({ts, text: s});
     // also print to console to surface in logcat
     console.log(line);
   }
@@ -168,7 +199,64 @@ export default function App() {
     try {
       await RNFS.writeFile(path, log, 'utf8');
       appendLog('Saved logs to ' + path, 'INFO');
+      // write JSON logs
+      const jsonPath = RNFS.DocumentDirectoryPath + '/rn_wifi_p2p_logs.json';
+      try {
+        await RNFS.writeFile(jsonPath, JSON.stringify(logsJsonRef.current, null, 2), 'utf8');
+        appendLog('Saved structured logs to ' + jsonPath, 'INFO');
+      } catch (e) { appendLog('Failed to save JSON logs: ' + e, 'ERROR'); }
     } catch (e) { appendLog('Failed to save logs: ' + e, 'ERROR'); }
+  }
+
+  // File picker + sender
+  async function pickAndSendFile() {
+    try {
+      const res = await DocumentPicker.pickSingle({type: [DocumentPicker.types.images, DocumentPicker.types.video, DocumentPicker.types.pdf]});
+      appendLog('Picked file: ' + res.name + ' uri=' + res.uri, 'INFO');
+      // copy if content uri
+      let path = res.uri;
+      if (path.startsWith('content://')) {
+        const dest = RNFS.DocumentDirectoryPath + '/' + (res.name || ('file_' + Date.now()));
+        try {
+          await RNFS.copyFile(path, dest);
+          path = dest;
+        } catch (e) {
+          appendLog('Failed to copy content uri: ' + e, 'ERROR');
+        }
+      }
+      const to = connectionInfo && (connectionInfo.groupOwnerAddress || connectionInfo.groupOwnerIP);
+      if (to && RNWifiP2p.sendFileTo) {
+        await RNWifiP2p.sendFileTo(path, to);
+        appendLog('File send initiated to ' + to, 'INFO');
+      } else {
+        await Queue.enqueue({type:'file', path, to});
+        appendLog('Queued file for later send', 'INFO');
+      }
+    } catch (e) {
+      if (DocumentPicker.isCancel && DocumentPicker.isCancel(e)) appendLog('File pick cancelled', 'INFO'); else appendLog('File pick/send err: ' + e, 'ERROR');
+    }
+  }
+
+  // Send a text message to peer or queue if offline
+  async function sendMessageToPeer(text) {
+    const to = connectionInfo && (connectionInfo.groupOwnerAddress || connectionInfo.groupOwnerIP);
+    const payload = {type:'message', message:text, to, port:8080};
+    try {
+      if (to && RNWifiP2p.sendMessageTo) {
+        await RNWifiP2p.sendMessageTo(text, to);
+        appendLog('Message sent to ' + to, 'INFO');
+      } else if (to) {
+        await new Promise((res, rej) => {
+          const client = TcpSocket.createConnection({port:8080, host:to}, () => { client.write(text); });
+          client.on('data', () => { client.destroy(); res(); });
+          client.on('error', e => rej(e));
+        });
+        appendLog('Message TCP sent to ' + to, 'INFO');
+      } else {
+        await Queue.enqueue(payload);
+        appendLog('Queued message for later send', 'INFO');
+      }
+    } catch (e) { appendLog('sendMessage err: ' + e, 'ERROR'); await Queue.enqueue(payload); }
   }
 
   return (
@@ -193,6 +281,10 @@ export default function App() {
           const host = connectionInfo && (connectionInfo.groupOwnerAddress || connectionInfo.groupOwnerIP || connectionInfo.groupOwnerAddress);
           if (host) connectTcpClient(host, 8080); else appendLog('No GO IP available yet', 'WARN');
         }} />
+        <View style={{marginTop:8, marginBottom:8}}>
+          <TextInput placeholder="Message to peer" style={{borderWidth:1, padding:8, marginTop:8}} onSubmitEditing={(e) => sendMessageToPeer(e.nativeEvent.text)} />
+          <Button title="Pick & Send File" onPress={pickAndSendFile} />
+        </View>
       </View>
 
       <View style={{marginTop:12}}>

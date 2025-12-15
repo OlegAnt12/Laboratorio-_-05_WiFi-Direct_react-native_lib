@@ -13,4 +13,21 @@
     "react-native-zeroconf": "^0.13.8",
     "react-native-fs": "^2.6.0"
   }
+  ,
+  "devDependencies": {
+    "jest": "29.6.1",
+    "react-native-document-picker": "^9.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transformIgnorePatterns": ["node_modules/(?!(react-native|@react-native|@react-native-community|@react-native/polyfills)/)"],
+    "moduleNameMapper": {
+      "^@react-native/polyfills$": "<rootDir>/__mocks__/polyfills.js",
+      "^@react-native/polyfills/(.*)$": "<rootDir>/__mocks__/polyfills.js"
+    }
+  },
+  "scripts": {
+    "start": "react-native start",
+    "test": "jest"
+  }
 }

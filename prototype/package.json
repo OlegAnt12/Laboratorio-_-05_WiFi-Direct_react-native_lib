@@ -11,7 +11,8 @@
     "react-native-wifi-p2p": "^3.6.0",
     "react-native-tcp-socket": "^6.3.0",
     "react-native-zeroconf": "^0.13.8",
-    "react-native-fs": "^2.6.0"
+    "react-native-fs": "^2.6.0",
+    "js-sha256": "^0.10.0"
   }
   ,
   "devDependencies": {

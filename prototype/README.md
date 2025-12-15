@@ -53,6 +53,27 @@ Also add the Wi‑Fi Direct feature declaration (optional):
 
 Behavior to test
 
-- Discovery: start/stop discovery and show discovered peers.
-- Connect: select peer to connect and observe `getConnectionInfo` data.
-- Data exchange: on group owner start a TCP server and on the other device connect as client and exchange sample messages.
+
+New features added:
+
+- UI: input to set number of discovery trials and buttons to start measurements.
+- Auto‑reconnect: if a connect fails, the app attempts reconnects with exponential backoff.
+- Detailed logs: logs are timestamped and prefixed with `RN_WIFI_P2P`; use "Export Logs" to save to device documents.
+- Metrics export: discovery measurements save `discovery_metrics.csv` to the app documents folder; use `prototype/scripts/parse_metrics.py` to compute basic stats.
+
+Scripts:
+
+- `prototype/scripts/collect_logs.sh <package.name> [out.txt]` — runs `adb logcat` and captures lines with `RN_WIFI_P2P` for 20s.
+- `prototype/scripts/parse_metrics.py <csv>` — computes mean/stddev/min/max of discovery times (ignores -1 entries as timeouts).
+
+Example steps to run a measurement (manual)
+
+1. Install the app on two Android devices and grant permissions (see earlier section).
+2. On device A: open app, press "Measure discovery" (set trials to desired number).
+3. After measurement finishes, use `adb` to pull the file:
+
+```bash
+adb shell "cat /data/data/<your.package.name>/files/discovery_metrics.csv" > discovery_metrics.csv
+```
+
+Or use the helper script to collect logs while you run the test and then parse metrics.

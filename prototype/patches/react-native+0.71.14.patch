@@ -1,0 +1,34 @@
+*** Begin Patch
+*** Update File: node_modules/react-native/template/android/app/build.gradle
+@@
+-import com.android.build.OutputFile
++// The class `com.android.build.OutputFile` was removed in newer Android Gradle
++// Plugin versions; avoid importing it directly and use a robust ABI detection
++// approach so this template is compatible with multiple AGP versions.
+@@
+-            def abi = output.getFilter(OutputFile.ABI)
+-            if (abi != null) {  // null for the universal-debug, universal-release variants
+-                output.versionCodeOverride =
+-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
+-            }
++            // Try to determine the ABI filter in a way compatible with multiple AGP versions
++            def abi = null
++            if (output.hasProperty('filters') && output.filters != null) {
++                def abiFilter = output.filters.find { f -> f.filterType == 'ABI' }
++                if (abiFilter != null) {
++                    abi = abiFilter.identifier
++                }
++            }
++
++            // Fallbacks for other plugin implementations
++            if (abi == null && output.hasProperty('getFilter')) {
++                try {
++                    abi = output.getFilter('ABI')
++                } catch (ignored) {
++                }
++            }
++
++            if (abi != null) {  // null for the universal-debug, universal-release variants
++                output.versionCodeOverride = defaultConfig.versionCode * 1000 + (versionCodes.get(abi) ?: 0)
++            }
+*** End Patch

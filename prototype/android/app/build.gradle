@@ -179,30 +179,37 @@ android {
             // https://developer.android.com/studio/build/configure-apk-splits.html
             // Example: versionCode 1 will generate 1001 for armeabi-v7a, 1002 for x86, etc.
             def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
-            // Resolve ABI filter in a way that works across AGP versions
+
+            // Try to determine the ABI filter in a way compatible with multiple AGP versions
             def abi = null
-            try {
-                // Older API: output.getFilter("ABI") or output.getFilter(OutputFile.ABI)
-                abi = output.getFilter("ABI")
-            } catch (ignored) {}
-            if (abi == null) {
-                try {
-                    // Newer API: output.getFilters() -> filter objects with filterType/identifier
-                    def filters = output.getFilters()
-                    if (filters != null) {
-                        filters.each { f ->
-                            try {
-                                def ft = f.getFilterType().toString()
-                                if (ft.toUpperCase() == "ABI") {
-                                    abi = (f.respondsTo(f, 'getIdentifier') ? f.getIdentifier() : f.identifier)
-                                }
-                            } catch (ignore) {}
-                        }
-                    }
-                } catch (ignored) {}
+            if (output.hasProperty('filters') && output.filters != null) {
+                def abiFilter = output.filters.find { f -> f.filterType == 'ABI' }
+                if (abiFilter != null) {
+                    abi = abiFilter.identifier
+                }
             }
+
+            // Fallbacks: some older/newer plugin implementations expose different properties
+            if (abi == null && output.hasProperty('getFilter')) {
+                try {
+                    // Try calling getFilter with a string (best-effort) and fall back silently
+                    abi = output.getFilter('ABI')
+                } catch (ignored) {
+                }
+            }
+
             if (abi != null) {  // null for the universal-debug, universal-release variants
-                output.versionCodeOverride = defaultConfig.versionCode * 1000 + versionCodes.get(abi)
+                def newVersionCode = defaultConfig.versionCode * 1000 + (versionCodes.get(abi) ?: 0)
+                try {
+                    if (output.hasProperty('versionCodeOverride')) {
+                        output.versionCodeOverride = newVersionCode
+                    } else if (variant.hasProperty('versionCode')) {
+                        // As a last resort, set the merged flavor's versionCode
+                        variant.mergedFlavor.versionCode = newVersionCode
+                    }
+                } catch (ignored) {
+                    // If we can't set a version code on this output, skip
+                }
             }
 
         }

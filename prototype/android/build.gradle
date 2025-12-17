@@ -3,11 +3,19 @@
 buildscript {
     ext {
         buildToolsVersion = findProperty('android.buildToolsVersion') ?: '33.0.0'
-        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '4')
+        // Ensure a reasonable default minSdkVersion. Older templates used '4' which is
+        // incompatible with many modern dependencies (e.g., Flipper requires >= 15).
+        // Use 21 as a safe minimum for modern Android and React Native compatibility.
+        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '21')
         compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '33')
         targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '33')
         if (findProperty('android.kotlinVersion')) {
             kotlinVersion = findProperty('android.kotlinVersion')
+        }
+        // Ensure a default Kotlin version so all subprojects use the same Kotlin binary
+        // version (prevents "compiled with an incompatible version of Kotlin" errors).
+        if (!ext.has('kotlinVersion')) {
+            kotlinVersion = '1.8.10'
         }
         frescoVersion = findProperty('expo.frescoVersion') ?: '2.5.0'
 
@@ -26,7 +34,8 @@ buildscript {
 
 // Ensure these values are available on rootProject.ext for subprojects
 rootProject.ext.compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '33')
-rootProject.ext.minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '4')
+// Expose a sensible default for subprojects (match the default above)
+rootProject.ext.minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '21')
 rootProject.ext.targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '33')
 
 allprojects {

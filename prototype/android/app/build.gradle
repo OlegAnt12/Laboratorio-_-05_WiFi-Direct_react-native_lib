@@ -31,6 +31,17 @@ react {
         } else {
             entryFile = file("../index.js")
         }
+
+        // Ensure entryFile exists (fixes CI environments where relative paths may resolve unexpectedly).
+        if (!entryFile.exists()) {
+            def fallback = file(new File(projectRoot, "index.js").getAbsolutePath())
+            if (fallback.exists()) {
+                println "[INFO] entryFile not found at ${entryFile}. Falling back to ${fallback}"
+                entryFile = fallback
+            } else {
+                println "[WARN] entryFile not found at ${entryFile} and fallback ${fallback} is missing. The bundle task will fail with a clear message."
+            }
+        }
     // Use a sanitized node resolve output to avoid embedded newlines causing empty paths
         def rnPathRaw = ["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text
         def rnPath = rnPathRaw == null ? "" : rnPathRaw.trim().replaceAll(/\r|\n/, "")

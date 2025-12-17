@@ -142,7 +142,8 @@ def reactNativeArchitectures() {
 android {
     ndkVersion rootProject.ext.ndkVersion
 
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    // Use the root project compileSdkVersion if set, otherwise fall back to 33
+    compileSdkVersion (rootProject.ext.has('compileSdkVersion') ? rootProject.ext.compileSdkVersion : Integer.parseInt(findProperty('android.compileSdkVersion') ?: '33'))
 
     namespace 'com.example.rnwifip2pprototype'
     defaultConfig {

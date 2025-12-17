@@ -5,6 +5,7 @@ import TcpSocket from 'react-native-tcp-socket';
 import RNFS from 'react-native-fs';
 import * as Queue from './src/queue';
 import {sendFileChunked, startChunkedServer} from './src/tcp_chunked';
+import {PermissionsAndroid, Platform} from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
   const [transfers, setTransfers] = useState([]);
   const [discoverTrials, setDiscoverTrials] = useState('5');
   const discoveryMetricsRef = useRef([]);
+  const serverRef = useRef(null);
 
   useEffect(() => {
     RNWifiP2p.initialize().catch(err => appendLog('init err: ' + err));
@@ -69,6 +71,27 @@ export default function App() {
           }
         }).then(res => appendLog('Queue processed: ' + JSON.stringify(res), 'INFO')).catch(e => appendLog('Queue process err: ' + e, 'ERROR'));
       }
+      // Start chunked TCP server if we're the group owner and no server running
+      try {
+        if (info && info.groupFormed && info.isGroupOwner && !serverRef.current) {
+          appendLog('Device is group owner — starting chunked TCP server', 'INFO');
+          serverRef.current = startChunkedServer(({name, bytesReceived, total, complete, path}) => {
+            appendLog(`Incoming file ${name} progress ${bytesReceived}/${total}`);
+            if (complete) appendLog(`Incoming file ${name} complete saved to ${path}`);
+            setTransfers(t => {
+              const exists = t.find(x => x.name === name && x.status === 'receiving');
+              if (!exists) return [...t, {id: 'in-' + Date.now(), name, bytes: bytesReceived, total, status: complete ? 'done' : 'receiving', path}];
+              return t.map(x => x.name === name ? {...x, bytes: bytesReceived, total, status: complete ? 'done' : 'receiving', path} : x);
+            });
+          }, 8080);
+        }
+        // If group no longer formed or not owner, stop server
+        if ((!info || !info.groupFormed || !info.isGroupOwner) && serverRef.current) {
+          try { serverRef.current.close(); } catch (e) {}
+          serverRef.current = null;
+          appendLog('Stopped chunked TCP server (no longer group owner)');
+        }
+      } catch (e) { appendLog('Server lifecycle err: ' + e, 'ERROR'); }
     });
 
     return () => {
@@ -223,6 +246,20 @@ export default function App() {
   // File picker + sender
   async function pickAndSendFile() {
     try {
+      // Request runtime permissions on Android for reading external files
+      if (Platform.OS === 'android') {
+        try {
+          const perms = [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE];
+          // WRITE permission may be needed on older Android versions
+          perms.push(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+          const res = await PermissionsAndroid.requestMultiple(perms);
+          const ok = Object.values(res).every(v => v === PermissionsAndroid.RESULTS.GRANTED || v === PermissionsAndroid.RESULTS.GRANTED.toString());
+          if (!ok) {
+            appendLog('Storage permission denied', 'ERROR');
+            return;
+          }
+        } catch (e) { appendLog('Permission request failed: ' + e, 'ERROR'); return; }
+      }
       const res = await DocumentPicker.pickSingle({type: [DocumentPicker.types.images, DocumentPicker.types.video, DocumentPicker.types.pdf]});
       appendLog('Picked file: ' + res.name + ' uri=' + res.uri, 'INFO');
       // copy if content uri

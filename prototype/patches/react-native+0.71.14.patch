@@ -1,0 +1,44 @@
+diff --git a/node_modules/react-native/template/android/app/build.gradle b/node_modules/react-native/template/android/app/build.gradle
+index 71195c7..bd84cb3 100644
+--- a/node_modules/react-native/template/android/app/build.gradle
++++ b/node_modules/react-native/template/android/app/build.gradle
+@@ -1,7 +1,9 @@
+ apply plugin: "com.android.application"
+ apply plugin: "com.facebook.react"
+ 
+-import com.android.build.OutputFile
++// The class `com.android.build.OutputFile` was removed in newer Android Gradle
++// Plugin versions; avoid importing it directly and use a robust ABI detection
++// approach so this template is compatible with multiple AGP versions.
+ 
+ /**
+  * This is the configuration block to customize your React Native Android app.
+@@ -138,10 +140,25 @@ android {
+             // https://developer.android.com/studio/build/configure-apk-splits.html
+             // Example: versionCode 1 will generate 1001 for armeabi-v7a, 1002 for x86, etc.
+             def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
+-            def abi = output.getFilter(OutputFile.ABI)
++            // Try to determine the ABI filter in a way compatible with multiple AGP versions
++            def abi = null
++            if (output.hasProperty('filters') && output.filters != null) {
++                def abiFilter = output.filters.find { f -> f.filterType == 'ABI' }
++                if (abiFilter != null) {
++                    abi = abiFilter.identifier
++                }
++            }
++
++            // Fallbacks for other plugin implementations
++            if (abi == null && output.hasProperty('getFilter')) {
++                try {
++                    abi = output.getFilter('ABI')
++                } catch (ignored) {
++                }
++            }
++
+             if (abi != null) {  // null for the universal-debug, universal-release variants
+-                output.versionCodeOverride =
+-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
++                output.versionCodeOverride = defaultConfig.versionCode * 1000 + (versionCodes.get(abi) ?: 0)
+             }
+ 
+         }

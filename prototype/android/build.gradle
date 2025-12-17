@@ -1,0 +1,58 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    ext {
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '33.0.0'
+        // Ensure a reasonable default minSdkVersion. Older templates used '4' which is
+        // incompatible with many modern dependencies (e.g., Flipper requires >= 15).
+        // Use 21 as a safe minimum for modern Android and React Native compatibility.
+        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '21')
+        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '33')
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '33')
+        if (findProperty('android.kotlinVersion')) {
+            kotlinVersion = findProperty('android.kotlinVersion')
+        }
+        // Ensure a default Kotlin version so all subprojects use the same Kotlin binary
+        // version (prevents "compiled with an incompatible version of Kotlin" errors).
+        if (!ext.has('kotlinVersion')) {
+            kotlinVersion = '1.8.10'
+        }
+        frescoVersion = findProperty('expo.frescoVersion') ?: '2.5.0'
+
+        // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
+        ndkVersion = "23.1.7779620"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath('com.android.tools.build:gradle:7.4.1')
+        classpath('com.facebook.react:react-native-gradle-plugin')
+    }
+}
+
+// Ensure these values are available on rootProject.ext for subprojects
+rootProject.ext.compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '33')
+// Expose a sensible default for subprojects (match the default above)
+rootProject.ext.minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '21')
+rootProject.ext.targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '33')
+
+allprojects {
+    repositories {
+        maven {
+            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+            def rnPathRaw = ['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text
+            def rnPath = rnPathRaw == null ? "" : rnPathRaw.trim().replaceAll(/\r|\n/, "")
+            url(new File(rnPath, '../android'))
+        }
+        maven {
+            // Android JSC is installed from npm
+            url(new File(['node', '--print', "require.resolve('jsc-android/package.json')"].execute(null, rootDir).text.trim(), '../dist'))
+        }
+
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}

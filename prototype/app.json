@@ -11,7 +11,6 @@
     ],
     "android": {
       "package": "com.example.rnwifip2pprototype",
-      "minSdkVersion": 4,
       "permissions": [
         "INTERNET",
         "ACCESS_FINE_LOCATION",

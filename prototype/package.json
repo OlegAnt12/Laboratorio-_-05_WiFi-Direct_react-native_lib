@@ -39,6 +39,6 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
-    "postinstall": "echo 'skip patch-package during CI temporary'"
+    "postinstall": "patch-package"
   }
 }
